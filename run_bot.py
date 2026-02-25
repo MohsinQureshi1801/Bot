@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 from src.backtest import run_backtest, save_trades
@@ -19,11 +18,7 @@ def parse_args() -> argparse.Namespace:
         help="Data source to use",
     )
     p.add_argument("--csv", default="", help="CSV path when --source csv")
-    p.add_argument(
-        "--api-key",
-        default="",
-        help="TwelveData API key when --source twelvedata (or set TWELVEDATA_API_KEY env var)",
-    )
+    p.add_argument("--api-key", default="", help="TwelveData API key when --source twelvedata")
     p.add_argument("--bars", type=int, default=1200, help="Bars for sample or API output size")
     p.add_argument("--output-dir", default="data", help="Folder for outputs")
     return p.parse_args()
@@ -42,8 +37,7 @@ def main() -> None:
         source = args.csv
 
     elif args.source == "twelvedata":
-        api_key = args.api_key or os.getenv("TWELVEDATA_API_KEY", "")
-        candles = fetch_twelvedata_xauusd_5m(api_key=api_key, output_size=args.bars)
+        candles = fetch_twelvedata_xauusd_5m(api_key=args.api_key, output_size=args.bars)
         source = str(save_csv(candles, out_dir / "xauusd_5m_twelvedata.csv"))
         print(f"Downloaded real XAUUSD 5m data to: {source}")
 

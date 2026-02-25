@@ -63,19 +63,6 @@ Accepted time formats include:
 python run_bot.py --source twelvedata --api-key YOUR_KEY --bars 5000
 ```
 
-Or set env var once and avoid passing key each time:
-
-```bash
-export TWELVEDATA_API_KEY="YOUR_KEY"
-python run_bot.py --source twelvedata --bars 5000
-```
-
-If you get HTTP 403:
-- regenerate API key (your key in the message appears exposed; rotate it),
-- verify your Twelve Data plan supports this endpoint/symbol,
-- try lower bars first (`--bars 500`),
-- fallback to `--source csv` with broker-exported XAUUSD 5m candles.
-
 This downloads real 5m XAU/USD candles, saves them to `data/xauusd_5m_twelvedata.csv`, then runs the full strategy + backtest.
 
 ---

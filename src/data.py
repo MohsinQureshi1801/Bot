@@ -5,9 +5,8 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from random import random
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 from src.models import Candle
 
@@ -78,10 +77,14 @@ def _parse_timestamp(value: str) -> datetime:
         raise ValueError(f"Unsupported timestamp format: {value}") from exc
 
 
-def _download_twelvedata(symbol: str, api_key: str, output_size: int, timeout_s: int) -> dict:
+def fetch_twelvedata_xauusd_5m(api_key: str, output_size: int = 5000, timeout_s: int = 30) -> list[Candle]:
+    """Download real XAU/USD 5m candles using Twelve Data REST API."""
+    if not api_key:
+        raise ValueError("TwelveData API key is required")
+
     query = urlencode(
         {
-            "symbol": symbol,
+            "symbol": "XAU/USD",
             "interval": "5min",
             "outputsize": str(output_size),
             "apikey": api_key,
@@ -89,64 +92,33 @@ def _download_twelvedata(symbol: str, api_key: str, output_size: int, timeout_s:
         }
     )
     url = f"https://api.twelvedata.com/time_series?{query}"
-    req = Request(url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Bot/1.0"})
 
-    with urlopen(req, timeout=timeout_s) as resp:
+    with urlopen(url, timeout=timeout_s) as resp:
         payload = resp.read().decode("utf-8")
-    return json.loads(payload)
 
+    data = json.loads(payload)
+    if "status" in data and data["status"] == "error":
+        raise RuntimeError(f"TwelveData error: {data.get('message', 'unknown error')}")
+    if "values" not in data:
+        raise RuntimeError("Unexpected TwelveData response: missing 'values'")
 
-def fetch_twelvedata_xauusd_5m(api_key: str, output_size: int = 5000, timeout_s: int = 30) -> list[Candle]:
-    """Download real XAU/USD 5m candles using Twelve Data REST API."""
-    if not api_key:
-        raise ValueError("TwelveData API key is required")
-
-    symbols = ["XAU/USD", "XAUUSD"]
-    last_error = ""
-
-    for symbol in symbols:
-        try:
-            data = _download_twelvedata(symbol=symbol, api_key=api_key, output_size=output_size, timeout_s=timeout_s)
-        except HTTPError as exc:
-            if exc.code == 403:
-                last_error = (
-                    "HTTP 403 from TwelveData. This usually means the key is invalid/revoked, the free plan "
-                    "doesn't include this endpoint/symbol, or your request was blocked. "
-                    "Try regenerating key, reducing --bars, or using --source csv."
-                )
-            else:
-                last_error = f"HTTP error from TwelveData: {exc.code}"
-            continue
-        except URLError as exc:
-            last_error = f"Network error while contacting TwelveData: {exc.reason}"
-            continue
-
-        if "status" in data and data["status"] == "error":
-            last_error = f"TwelveData error for {symbol}: {data.get('message', 'unknown error')}"
-            continue
-        if "values" not in data:
-            last_error = f"Unexpected TwelveData response for {symbol}: missing 'values'"
-            continue
-
-        out: list[Candle] = []
-        for r in data["values"]:
-            out.append(
-                Candle(
-                    ts=_parse_timestamp(r["datetime"]),
-                    open=float(r["open"]),
-                    high=float(r["high"]),
-                    low=float(r["low"]),
-                    close=float(r["close"]),
-                    volume=float(r.get("volume", 0.0) or 0.0),
-                )
+    out: list[Candle] = []
+    for r in data["values"]:
+        out.append(
+            Candle(
+                ts=_parse_timestamp(r["datetime"]),
+                open=float(r["open"]),
+                high=float(r["high"]),
+                low=float(r["low"]),
+                close=float(r["close"]),
+                volume=float(r.get("volume", 0.0) or 0.0),
             )
+        )
 
-        out.sort(key=lambda x: x.ts)
-        if out:
-            return out
-        last_error = f"No candles returned from TwelveData for symbol {symbol}"
-
-    raise RuntimeError(last_error or "Failed to download data from TwelveData")
+    out.sort(key=lambda x: x.ts)
+    if not out:
+        raise RuntimeError("No candles returned from TwelveData")
+    return out
 
 
 def save_csv(candles: list[Candle], path: str | Path) -> Path:
